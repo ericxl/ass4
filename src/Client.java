@@ -7,7 +7,7 @@ import java.io.*;
 public class Client {
   private static final int TIMEOUT = 1500;
 
-  private static final List<ServerInformation> servers = new ArrayList<>();
+  private static final List<ServerInfo> servers = new ArrayList<>();
 
   private static int currentServerNumber = 0;
   private static Socket currentConnection;
@@ -16,7 +16,7 @@ public class Client {
     Scanner sc = new Scanner(System.in);
 
     if (args.length != 1) {
-      System.out.println("Input needs cfg file");
+      System.out.println("You need a cfg file for client");
       System.exit(-1);
     }
 
@@ -36,10 +36,8 @@ public class Client {
         InetAddress address = InetAddress.getByName(info[0]);
         int port = Integer.parseInt(info[1]);
 
-        servers.add(new ServerInformation(address, port));
+        servers.add(new ServerInfo(address, port));
       } catch (UnknownHostException e) {
-        System.out.println("An error occurred adding server: " + server);
-        System.out.println("Ignoring server and continuing...");
       }
     }
     sc.close();
@@ -61,20 +59,19 @@ public class Client {
             break;
 
           default:
-            System.out.println("ERROR: No such command");
+            System.out.println("Try again: No such command");
         }
       }
       currentConnection.close();
     } catch (IOException e) {
-      System.err.println("ERROR: Unknown error occurred: " + e);
     }
   }
 
   private static void performCommand(String message) {
-    boolean complete = false;
+    boolean done = false;
     StringBuilder reply = new StringBuilder();
 
-    while (!complete) {
+    while (!done) {
       try {
         PrintWriter writer = new PrintWriter(currentConnection.getOutputStream());
         BufferedReader receiver = new BufferedReader(new InputStreamReader(currentConnection.getInputStream()));
@@ -95,7 +92,7 @@ public class Client {
 
         while (line != null) {
           if (line.equals("done")) {
-            complete = true;
+            done = true;
 
             reply.deleteCharAt(reply.lastIndexOf("\n"));
             break;
@@ -107,25 +104,23 @@ public class Client {
           line = receiver.readLine();
         }
       } catch (SocketTimeoutException e) {
-        System.out.println("TIMEOUT.");
         connectToNewServer(true);
       } catch (IOException e) {
-        System.out.println("Error");
         System.exit(-1);
       }
     }
 
     System.out.println(reply);
   }
-  private static void connectToNewServer(boolean oldServerDead) {
+  private static void connectToNewServer(boolean serverDown) {
     currentConnection = null;
 
-    if (oldServerDead) {
+    if (serverDown) {
       servers.remove(currentServerNumber);
     }
 
     for (int i = 0; i < servers.size(); i++) {
-      ServerInformation information = servers.get(i);
+      ServerInfo information = servers.get(i);
 
       try {
         currentConnection = new Socket(information.getAddress(), information.getPort());
@@ -135,23 +130,35 @@ public class Client {
         currentServerNumber = i;
         return;
       } catch (IOException e) {
-        System.out.println("Server " + information + " is unavailable.");
       }
     }
 
     if (currentConnection == null) {
-      System.out.println("Unable to connect to any servers.");
-      System.out.println("Ending execution...");
-
       System.exit(-1);
     }
   }
+    public static void waitOrTimeout(BufferedReader receiver, int timeout) throws SocketTimeoutException {
+      try {
+        long timestamp = System.currentTimeMillis();
+        while (!receiver.ready()) {
+          long time = System.currentTimeMillis();
+          if (time - timestamp >= timeout) {
+            throw new SocketTimeoutException();
+          }
+        }
+      } catch (SocketTimeoutException e) {
+        throw new SocketTimeoutException();
+      } catch (IOException e) {
+        System.out.println();
+        System.exit(-1);
+      }
+    }
 
-  private static class ServerInformation {
+  private static class ServerInfo {
     private final InetAddress address;
     private final int port;
 
-    ServerInformation(InetAddress address, int port) {
+    ServerInfo(InetAddress address, int port) {
       this.address = address;
       this.port = port;
     }
@@ -168,21 +175,4 @@ public class Client {
       return address.getHostName() + ":" + port;
     }
   }
-    public static void waitOrTimeout(BufferedReader receiver, int timeout) throws SocketTimeoutException {
-      try {
-        long timestamp = System.currentTimeMillis();
-        while (!receiver.ready()) {
-          long time = System.currentTimeMillis();
-          if (time - timestamp >= timeout) {
-            throw new SocketTimeoutException("Timeout occurred");
-          }
-        }
-      } catch (SocketTimeoutException e) {
-        // Timeout, connect to new server and try again
-        throw new SocketTimeoutException("Timeout occurred");
-      } catch (IOException e) {
-        System.out.println("A fatal error occurred.");
-        System.exit(-1);
-      }
-    }
 }
