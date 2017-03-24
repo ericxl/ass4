@@ -125,7 +125,7 @@ public class Client {
       try {
         currentConnection = new Socket(information.getAddress(), information.getPort());
         PrintWriter protocol = new PrintWriter(currentConnection.getOutputStream());
-        protocol.println("yes");
+        protocol.println("hello");
         protocol.flush();
         currentServerNumber = i;
         return;
